@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node --version:*)",
+      "Bash(brew install:*)",
+      "Bash(export PATH=\"/opt/homebrew/opt/node@22/bin:$PATH\":*)",
+      "Bash(npm --version:*)",
+      "Bash(PATH=\"/opt/homebrew/opt/node@22/bin:$PATH\" npm run dev:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(python scraper_service.py:*)",
+      "Bash(python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(chmod:*)"
+    ]
+  }
+}
