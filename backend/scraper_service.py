@@ -39,7 +39,7 @@ class RedditScraper:
 
     def __init__(
         self,
-        subreddit: Optional[str] = None,
+        subreddits: Optional[str] = None,
         min_upvote_ratio: Optional[float] = None,
         min_upvotes: Optional[int] = None,
         fetch_limit: Optional[int] = None
@@ -48,18 +48,21 @@ class RedditScraper:
         Initialize the scraper.
 
         Args:
-            subreddit: The subreddit to scrape (defaults to env var or 'wallstreetbets')
+            subreddits: Comma-separated subreddits (defaults to env var or 'wallstreetbets')
+                       Example: "wallstreetbets,stocks,investing"
             min_upvote_ratio: Minimum upvote ratio filter (defaults to env var or 0.70)
             min_upvotes: Minimum upvotes filter (defaults to env var or 50)
-            fetch_limit: Number of posts to fetch (defaults to env var or 100)
+            fetch_limit: Number of posts to fetch per subreddit (defaults to env var or 100)
         """
         # Load configuration from environment or use defaults
-        self.subreddit = subreddit or os.getenv("REDDIT_SUBREDDIT", "wallstreetbets")
+        subreddits_str = subreddits or os.getenv("REDDIT_SUBREDDIT", "wallstreetbets")
+
+        # Parse comma-separated subreddits
+        self.subreddits = [s.strip() for s in subreddits_str.split(",")]
+
         self.min_upvote_ratio = min_upvote_ratio or float(os.getenv("MIN_UPVOTE_RATIO", "0.70"))
         self.min_upvotes = min_upvotes or int(os.getenv("MIN_UPVOTES", "50"))
         self.fetch_limit = fetch_limit or int(os.getenv("REDDIT_FETCH_LIMIT", "100"))
-
-        self.base_url = f"https://www.reddit.com/r/{self.subreddit}/hot.json"
 
         # Quality keywords that indicate supply chain signals
         self.quality_keywords = ["delay", "inventory", "backorder", "shortage"]
@@ -69,23 +72,27 @@ class RedditScraper:
             "User-Agent": "PULSE/1.0 (Educational Project)"
         }
 
-    def fetch_hot_posts(self, limit: int = 100) -> List[Dict]:
+    def fetch_hot_posts_from_subreddit(self, subreddit: str, limit: int = 100) -> List[Dict]:
         """
-        Fetch hot posts from the subreddit.
+        Fetch hot posts from a specific subreddit.
 
         Args:
+            subreddit: Name of the subreddit (e.g., "wallstreetbets")
             limit: Number of posts to fetch (default: 100)
 
         Returns:
             List of post dictionaries with processed data
         """
-        print(f"🔍 Fetching hot posts from r/{self.subreddit}...")
+        print(f"🔍 Fetching hot posts from r/{subreddit}...")
 
         try:
+            # Build URL for this specific subreddit
+            base_url = f"https://www.reddit.com/r/{subreddit}/hot.json"
+
             # Make request to Reddit's .json endpoint
             params = {"limit": limit}
             response = requests.get(
-                self.base_url,
+                base_url,
                 headers=self.headers,
                 params=params,
                 timeout=10
@@ -100,34 +107,58 @@ class RedditScraper:
             data = response.json()
             posts = data.get("data", {}).get("children", [])
 
-            print(f"✅ Fetched {len(posts)} posts")
+            print(f"✅ Fetched {len(posts)} posts from r/{subreddit}")
 
             # Process each post
             processed_posts = []
             for post in posts:
                 post_data = post.get("data", {})
-                processed = self._process_post(post_data)
+                processed = self._process_post(post_data, subreddit)
 
                 # Only keep posts that pass our filters
                 if processed and self._passes_filter(processed):
                     processed_posts.append(processed)
 
-            print(f"✅ {len(processed_posts)} posts passed quality filters")
+            print(f"✅ {len(processed_posts)} posts passed quality filters from r/{subreddit}")
             return processed_posts
 
         except requests.exceptions.RequestException as e:
-            print(f"❌ Network error: {e}")
+            print(f"❌ Network error for r/{subreddit}: {e}")
             return []
         except json.JSONDecodeError as e:
-            print(f"❌ JSON parsing error: {e}")
+            print(f"❌ JSON parsing error for r/{subreddit}: {e}")
             return []
 
-    def _process_post(self, post_data: Dict) -> Dict:
+    def fetch_hot_posts(self, limit: int = 100) -> List[Dict]:
+        """
+        Fetch hot posts from all configured subreddits.
+
+        Args:
+            limit: Number of posts to fetch per subreddit (default: 100)
+
+        Returns:
+            List of post dictionaries from all subreddits combined
+        """
+        all_posts = []
+
+        for subreddit in self.subreddits:
+            posts = self.fetch_hot_posts_from_subreddit(subreddit, limit)
+            all_posts.extend(posts)
+
+            # Be nice to Reddit - small delay between subreddits
+            if len(self.subreddits) > 1:
+                time.sleep(1)
+
+        print(f"\n📊 Total: {len(all_posts)} posts from {len(self.subreddits)} subreddit(s)")
+        return all_posts
+
+    def _process_post(self, post_data: Dict, subreddit: str) -> Dict:
         """
         Extract and process relevant fields from a Reddit post.
 
         Args:
             post_data: Raw post data from Reddit API
+            subreddit: Name of the subreddit this post is from
 
         Returns:
             Processed post dictionary with calculated fields
@@ -164,7 +195,7 @@ class RedditScraper:
             return {
                 "source": "reddit",
                 "source_id": post_id,
-                "subreddit": self.subreddit,
+                "subreddit": subreddit,
                 "title": title,
                 "content": selftext,
                 "author": author,
@@ -209,7 +240,8 @@ class RedditScraper:
             posts: List of processed posts
         """
         print("\n" + "="*80)
-        print(f"📊 PULSE SCRAPER RESULTS - r/{self.subreddit}")
+        subreddit_list = ", ".join([f"r/{s}" for s in self.subreddits])
+        print(f"📊 PULSE SCRAPER RESULTS - {subreddit_list}")
         print("="*80 + "\n")
 
         if not posts:
@@ -257,8 +289,9 @@ class RedditScraper:
         print("\n" + "="*80)
         print("🚀 PULSE SCRAPER - PRODUCTION RUN")
         print("="*80)
-        print(f"  Subreddit: r/{self.subreddit}")
-        print(f"  Fetch Limit: {self.fetch_limit}")
+        subreddit_list = ", ".join([f"r/{s}" for s in self.subreddits])
+        print(f"  Subreddits: {subreddit_list}")
+        print(f"  Fetch Limit: {self.fetch_limit} per subreddit")
         print(f"  Min Upvote Ratio: {self.min_upvote_ratio}")
         print(f"  Min Upvotes: {self.min_upvotes}")
         print(f"  Save to DB: {save_to_db}")
@@ -353,7 +386,7 @@ if __name__ == "__main__":
         """)
 
         # Initialize scraper
-        scraper = RedditScraper(subreddit="wallstreetbets")
+        scraper = RedditScraper(subreddits="wallstreetbets")
 
         # Fetch and process posts (test mode - smaller limit)
         posts = scraper.fetch_hot_posts(limit=50)
