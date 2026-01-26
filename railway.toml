@@ -1,8 +1,7 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "pip install -r backend/requirements.txt"
 
 [deploy]
-startCommand = "python backend/main.py"
+startCommand = "cd backend && python main.py"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
