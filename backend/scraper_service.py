@@ -67,6 +67,9 @@ class RedditScraper:
         self.min_upvotes = min_upvotes or int(os.getenv("MIN_UPVOTES", "50"))
         self.fetch_limit = fetch_limit or int(os.getenv("REDDIT_FETCH_LIMIT", "100"))
 
+        # Debug: Log the actual values being used
+        print(f"📊 Config: MIN_UPVOTES={self.min_upvotes}, MIN_UPVOTE_RATIO={self.min_upvote_ratio}")
+
         # Quality keywords that indicate supply chain signals
         self.quality_keywords = ["delay", "inventory", "backorder", "shortage"]
 
