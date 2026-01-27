@@ -17,3 +17,15 @@ uvicorn==0.27.0
 
 # Data processing
 pydantic>=2.5.3
+
+# ============================================================================
+# AI PROCESSING LAYER
+# ============================================================================
+# Anthropic Claude for synthesis
+anthropic==0.40.0
+
+# OpenAI for sentiment analysis
+openai==1.59.5
+
+# Google Gemini for entity extraction
+google-generativeai==0.8.3
