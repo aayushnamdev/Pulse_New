@@ -73,7 +73,8 @@ class DatabaseService:
                 "source_id": post.get("source_id"),
                 "subreddit": post.get("subreddit"),
                 "title": post.get("title"),
-                "content": post.get("content"),
+                "content": post.get("content"),  # Now contains title + body narrative wrap
+                "source_url": post.get("source_url"),  # Full URL to original post
                 "author_id": post.get("author"),
                 "engagement_metrics": engagement_metrics,
                 "is_quality_signal": post.get("is_quality_signal", False),

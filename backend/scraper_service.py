@@ -171,6 +171,7 @@ class RedditScraper:
             post_id = post_data.get("id")
             title = post_data.get("title", "")
             selftext = post_data.get("selftext", "")
+            permalink = post_data.get("permalink", "")
             ups = post_data.get("ups", 0)
             num_comments = post_data.get("num_comments", 0)
             upvote_ratio = post_data.get("upvote_ratio", 0.0)
@@ -187,11 +188,18 @@ class RedditScraper:
             # Avoid division by zero for very new posts
             velocity = ups / max(age_hours, 0.1)
 
-            # Check if post contains quality keywords
-            content = f"{title} {selftext}".lower()
+            # Build content as narrative wrap: title + body
+            # This ensures Claude's synthesis layer has full context
+            content = f"{title}\n\n{selftext}".strip()
+
+            # Check if post contains quality keywords (use lowercase for matching)
+            content_lower = content.lower()
             is_quality_signal = any(
-                keyword in content for keyword in self.quality_keywords
+                keyword in content_lower for keyword in self.quality_keywords
             )
+
+            # Build source URL from permalink
+            source_url = f"https://reddit.com{permalink}" if permalink else ""
 
             # Convert Unix timestamp to readable datetime
             created_at = datetime.fromtimestamp(created_utc).isoformat()
@@ -201,7 +209,8 @@ class RedditScraper:
                 "source_id": post_id,
                 "subreddit": subreddit,
                 "title": title,
-                "content": selftext,
+                "content": content,  # Now contains title + body narrative wrap
+                "source_url": source_url,  # Full Reddit URL for reference
                 "author": author,
                 "flair": flair,
                 "upvotes": ups,
