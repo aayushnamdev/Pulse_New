@@ -31,6 +31,9 @@ except ImportError:
     DB_AVAILABLE = False
     print("⚠️  database_service not available - running in test mode only")
 
+# Import relevance filter
+from relevance_filter import is_relevant
+
 
 class RedditScraper:
     """
@@ -173,6 +176,7 @@ class RedditScraper:
             upvote_ratio = post_data.get("upvote_ratio", 0.0)
             created_utc = post_data.get("created_utc", 0)
             author = post_data.get("author", "[deleted]")
+            flair = post_data.get("link_flair_text", "")
 
             # Calculate post age in hours
             current_time = time.time()
@@ -199,6 +203,7 @@ class RedditScraper:
                 "title": title,
                 "content": selftext,
                 "author": author,
+                "flair": flair,
                 "upvotes": ups,
                 "num_comments": num_comments,
                 "upvote_ratio": upvote_ratio,
@@ -215,11 +220,12 @@ class RedditScraper:
 
     def _passes_filter(self, post: Dict) -> bool:
         """
-        Check if a post meets our quality thresholds.
+        Check if a post meets our quality thresholds and relevance criteria.
 
         Filter criteria:
         - Upvote ratio > configured threshold (default: 0.70)
         - Upvotes > configured threshold (default: 50)
+        - Content relevance (not "should I buy", "rate my portfolio", etc.)
 
         Args:
             post: Processed post dictionary
@@ -227,10 +233,16 @@ class RedditScraper:
         Returns:
             True if post passes filters, False otherwise
         """
-        return (
+        # Check quality thresholds
+        quality_ok = (
             post.get("upvote_ratio", 0) > self.min_upvote_ratio and
             post.get("upvotes", 0) > self.min_upvotes
         )
+
+        # Check relevance filter
+        relevance_ok = is_relevant(post)
+
+        return quality_ok and relevance_ok
 
     def print_results(self, posts: List[Dict]):
         """
