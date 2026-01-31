@@ -26,7 +26,6 @@ import logging
 # AI clients
 from anthropic import Anthropic
 from openai import OpenAI
-import google.generativeai as genai
 
 # Database service
 from database_service import DatabaseService
@@ -127,21 +126,16 @@ class SmartQueue:
 
 class TickerExtractor:
     """
-    3-layer hybrid ticker extraction.
+    2-layer hybrid ticker extraction (Gemini removed due to deprecation).
 
     Layer 1: Regex for $TICKER patterns
     Layer 2: Dictionary lookup from asset_mapping.json
-    Layer 3: Gemini 2.5 Flash for entity extraction
     """
 
-    def __init__(self, gemini_api_key: str, asset_mapping_path: str = 'asset_mapping.json'):
+    def __init__(self, asset_mapping_path: str = 'asset_mapping.json'):
         # Load asset mapping dictionary
         with open(asset_mapping_path, 'r') as f:
             self.asset_mapping = json.load(f)
-
-        # Configure Gemini
-        genai.configure(api_key=gemini_api_key)
-        self.gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
         # Regex patterns
         self.ticker_pattern = re.compile(r'\$([A-Z]{1,5})\b')
@@ -152,7 +146,7 @@ class TickerExtractor:
 
     def extract_tickers(self, content: str) -> Dict[str, List[str]]:
         """
-        Extract tickers using 3-layer hybrid approach.
+        Extract tickers using 2-layer hybrid approach (Gemini removed).
 
         Args:
             content: Post title + body text
@@ -161,7 +155,7 @@ class TickerExtractor:
             {
                 "tickers": ["NVDA", "TSLA"],
                 "companies": ["Nvidia", "Tesla"],
-                "keywords": ["semiconductor", "shortage"]
+                "keywords": []
             }
         """
         # Layer 1: Regex for $TICKER
@@ -170,18 +164,14 @@ class TickerExtractor:
         # Layer 2: Dictionary lookup
         dict_tickers, dict_companies = self._extract_dictionary_tickers(content)
 
-        # Layer 3: Gemini entity extraction
-        gemini_result = self._extract_gemini_entities(content)
-
         # Merge and deduplicate
-        all_tickers = list(set(regex_tickers + dict_tickers + gemini_result.get('tickers', [])))
-        all_companies = list(set(dict_companies + gemini_result.get('companies', [])))
-        keywords = gemini_result.get('keywords', [])
+        all_tickers = list(set(regex_tickers + dict_tickers))
+        all_companies = list(set(dict_companies))
 
         return {
             'tickers': all_tickers,
             'companies': all_companies,
-            'keywords': keywords
+            'keywords': []  # Keywords removed with Gemini layer
         }
 
     def _extract_regex_tickers(self, content: str) -> List[str]:
@@ -202,37 +192,6 @@ class TickerExtractor:
 
         return list(set(found_tickers)), list(set(found_companies))
 
-    def _extract_gemini_entities(self, content: str) -> Dict[str, List[str]]:
-        """Layer 3: Gemini AI entity extraction."""
-        try:
-            prompt = f"""Extract financial entities from this Reddit post.
-
-Post content:
-{content[:1500]}
-
-Return ONLY a JSON object with these keys:
-- tickers: array of stock ticker symbols mentioned (e.g., ["NVDA", "TSLA"])
-- companies: array of company names mentioned (e.g., ["Nvidia", "Tesla"])
-- keywords: array of key financial/market terms (e.g., ["semiconductor", "earnings"])
-
-Keep arrays concise (max 5 items each). Return ONLY the JSON, no other text."""
-
-            response = self.gemini_model.generate_content(prompt)
-            result_text = response.text.strip()
-
-            # Remove markdown code blocks if present
-            if result_text.startswith('```'):
-                result_text = result_text.split('```')[1]
-                if result_text.startswith('json'):
-                    result_text = result_text[4:]
-                result_text = result_text.strip()
-
-            result = json.loads(result_text)
-            return result
-
-        except Exception as e:
-            logger.warning(f"Gemini extraction failed: {str(e)}")
-            return {'tickers': [], 'companies': [], 'keywords': []}
 
 
 class SentimentScorer:
@@ -498,17 +457,15 @@ class SignalProcessor:
         # Load environment variables
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         self.anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
-        self.google_api_key = os.getenv('GOOGLE_API_KEY')
 
-        # Validate API keys
-        if not all([self.openai_api_key, self.anthropic_api_key, self.google_api_key]):
-            raise ValueError("Missing required API keys. Check .env file.")
+        # Validate API keys (Gemini removed)
+        if not all([self.openai_api_key, self.anthropic_api_key]):
+            raise ValueError("Missing required API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY). Check .env file.")
 
         # Initialize components
         self.db = DatabaseService()
         self.queue = SmartQueue(self.db)
         self.ticker_extractor = TickerExtractor(
-            gemini_api_key=self.google_api_key,
             asset_mapping_path='asset_mapping.json'
         )
         self.sentiment_scorer = SentimentScorer(openai_api_key=self.openai_api_key)

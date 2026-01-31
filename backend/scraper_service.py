@@ -73,14 +73,14 @@ class RedditScraper:
         # Quality keywords that indicate supply chain signals
         self.quality_keywords = ["delay", "inventory", "backorder", "shortage"]
 
-        # Reddit requires a user agent to avoid 429 errors
+        # Reddit requires a realistic user agent to avoid 403/429 errors
         self.headers = {
-            "User-Agent": "PULSE/1.0 (Educational Project)"
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         }
 
     def fetch_hot_posts_from_subreddit(self, subreddit: str, limit: int = 100) -> List[Dict]:
         """
-        Fetch hot posts from a specific subreddit.
+        Fetch hot posts from a specific subreddit with retry logic.
 
         Args:
             subreddit: Name of the subreddit (e.g., "wallstreetbets")
@@ -91,25 +91,51 @@ class RedditScraper:
         """
         print(f"🔍 Fetching hot posts from r/{subreddit}...")
 
+        max_retries = 3
+        retry_delay = 2  # Starting delay in seconds
+
+        for attempt in range(max_retries):
+            try:
+                # Build URL for this specific subreddit
+                base_url = f"https://www.reddit.com/r/{subreddit}/hot.json"
+
+                # Make request to Reddit's .json endpoint
+                params = {"limit": limit}
+                response = requests.get(
+                    base_url,
+                    headers=self.headers,
+                    params=params,
+                    timeout=10
+                )
+
+                # Check if request was successful
+                if response.status_code == 200:
+                    break  # Success - exit retry loop
+                elif response.status_code == 403:
+                    print(f"⚠️  Received 403 Forbidden from r/{subreddit} (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                        print(f"   Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        print(f"❌ Max retries reached for r/{subreddit}")
+                        return []
+                else:
+                    print(f"❌ Error: Received status code {response.status_code}")
+                    return []
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Network error for r/{subreddit} (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    print(f"   Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    return []
+
+        # Parse JSON response
         try:
-            # Build URL for this specific subreddit
-            base_url = f"https://www.reddit.com/r/{subreddit}/hot.json"
-
-            # Make request to Reddit's .json endpoint
-            params = {"limit": limit}
-            response = requests.get(
-                base_url,
-                headers=self.headers,
-                params=params,
-                timeout=10
-            )
-
-            # Check if request was successful
-            if response.status_code != 200:
-                print(f"❌ Error: Received status code {response.status_code}")
-                return []
-
-            # Parse JSON response
             data = response.json()
             posts = data.get("data", {}).get("children", [])
 
@@ -128,9 +154,6 @@ class RedditScraper:
             print(f"✅ {len(processed_posts)} posts passed quality filters from r/{subreddit}")
             return processed_posts
 
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Network error for r/{subreddit}: {e}")
-            return []
         except json.JSONDecodeError as e:
             print(f"❌ JSON parsing error for r/{subreddit}: {e}")
             return []
@@ -151,9 +174,9 @@ class RedditScraper:
             posts = self.fetch_hot_posts_from_subreddit(subreddit, limit)
             all_posts.extend(posts)
 
-            # Be nice to Reddit - small delay between subreddits
+            # Be nice to Reddit - delay between subreddits to avoid rate limiting
             if len(self.subreddits) > 1:
-                time.sleep(1)
+                time.sleep(2.5)
 
         print(f"\n📊 Total: {len(all_posts)} posts from {len(self.subreddits)} subreddit(s)")
         return all_posts

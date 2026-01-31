@@ -26,6 +26,3 @@ anthropic==0.40.0
 
 # OpenAI for sentiment analysis
 openai==1.59.5
-
-# Google Gemini for entity extraction
-google-generativeai==0.8.3
